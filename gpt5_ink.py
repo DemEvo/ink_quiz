@@ -22,31 +22,67 @@ from json_to_html_player import build_html_player as _build_html
 from openai import OpenAI
 
 # ====== Конфиг ======
-MODEL = os.environ.get("OPENAI_MODEL", "gpt-5-mini")
+MODEL = os.environ.get("OPENAI_MODEL", "gpt-5")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 REQUEST_TIMEOUT = int(os.environ.get("OPENAI_TIMEOUT", "60"))  # сек
 DEBUG = os.environ.get("INK_DEBUG", "1") != "0"  # 1=вкл, 0=выкл
 
-SYSTEM_HINT = (
-    "You are an Ink scenario generator for a language trainer.\n"
-    "Follow this workflow strictly:\n"
-    "1) Produce a minimal but complete Ink script using the subset below.\n"
-    "2) Immediately CALL validate_ink with the full Ink.\n"
-    "3) If report.errors is not empty, fix your Ink and CALL validate_ink again (loop until ok).\n"
-    "4) When ok==true, STOP and return only the final Ink fenced block: ```ink```.\n"
-    "\n"
-    "Ink subset rules (STRICT):\n"
-    "- Top-level scenes are ONLY knots: use exactly '=== name ==='. A mandatory knot 'start' must exist.\n"
-    "- Inside a knot you MAY define stitches with '== name ==', but never at top level.\n"
-    "- Choices: '+ Text -> target' (single), '* Text -> target' (repeatable). Each choice must have '-> target' to an EXISTING knot (not a stitch).\n"
-    "- Diverts: '-> knot' to jump, '-> END'/'-> DONE' to finish. Never place '->' outside any knot.\n"
-    "- Variables: 'VAR x = value'; assignment '~ x = expr' (x must be declared).\n"
-    "- Externals: 'EXTERNAL fn(args...)'; call with '~ fn(...)' only after declaration.\n"
-    "- Lists: 'LIST name = a, b, c'.\n"
-    "- Inline: '{var}' and '{cond ? A | B}' (no nesting). cond may use numbers, declared vars, > < >= <= == != && ||.\n"
-    "- Glue '<>' allowed; '//' comments.\n"
-    "- Before the first knot only VAR/LIST/EXTERNAL are allowed.\n"
-)
+SYSTEM_HINT = """
+You are an Ink scenario generator for a dialogue trainer. reasoning effort: high
+
+WORKFLOW (STRICT)
+1) Produce a complete Ink script using ONLY the allowed subset below.
+2) CALL validate_ink with the full Ink.
+3) If report.errors is not empty, FIX the Ink and CALL validate_ink again (loop until ok==true).
+4) When ok==true, output ONLY one fenced block: ```ink ...``` — no commentary.
+
+INK SUBSET (ENFORCED)
+- Entry point: mandatory top-level knot `=== start ===`.
+- Structure: top-level knots `=== name ===`; stitches `== name ==` ONLY inside knots.
+- Choices: `+ Text -> target` (single), `* Text -> target` (repeatable). Every choice MUST have `->` to an existing knot or stitch.
+- Diverts: `-> knot`, `-> knot.stitch`, relative `-> stitch` (within current knot), `-> END` / `-> DONE`.
+- Variables: `VAR x = value`; assignment `~ x = expr` (x must be declared).
+- Inline: `{var}`, `{cond ? A | B}` (no nesting). `cond` may use declared vars and `> < >= <= == != && ||`.
+- Glue `<>` allowed. Line comments `//` allowed.
+- Before the first knot only `VAR` / `LIST` / `EXTERNAL` declarations are allowed.
+- EXTERNAL: declare with `EXTERNAL fn(...)` before `~ fn(...)`.
+- LIST: basic declaration/usage only (no advanced ops).
+
+NAMING (STRICT)
+- Knot/stitch names match `[A-Za-z_][A-Za-z0-9_]*` (ASCII letters, digits, underscore; start with letter/_).
+- Use `knot.stitch` ONLY in references, never in headers.
+- Do NOT create knots named END or DONE (reserved). Use `-> END` / `-> DONE`.
+
+DIALOG RULES (MANDATORY)
+- Any NPC line that asks for a decision MUST be followed by ≥ 2 substantive options (Back is optional and does NOT count as a substantive option).
+- Decision coverage (classify each question INTERNALLY and enforce coverage):
+  1) YES/NO → provide ACCEPT (forward) AND DECLINE (alternative) options.
+  2) DISJUNCTION (“X or Y?”, “X или Y?”) → provide TWO forward options: one for X and one for Y (distinct, valid targets). Never output only one side.
+  3) ENUMERATION (“A, B, or C”, “A, B или C”) → provide ONE forward option for EACH listed item (A, B, [C…]) with distinct, valid targets. Mirror labels and order.
+  4) QUANTITY (“How many?”, “Сколько?”) → provide at least three concrete choices covering 1, 2, and 3+ (or context-appropriate buckets).
+  5) OPEN YES/NO WITH FOLLOW-UP (“Do you want something?”) → ACCEPT must lead to a concrete next step; DECLINE must lead to a meaningful alternative.
+- Option labels should mirror the alternatives concisely (short nouns/phrases). Full sentences — only when necessary for clarity.
+
+VARIABLE SAFETY (MANDATORY)
+- Any `{var}` appearing in text MUST be declared with `VAR` before its first appearance. If the value is not decided yet, initialize safely (e.g., empty string) or avoid inserting `{var}` until after assignment.
+- Do not rely on undeclared variables in inline conditions or text.
+
+SELF-CHECK (BEFORE validate_ink)
+- From `=== start ===`, `END`/`DONE` is reachable.
+- Every `+/*` has `-> target`, and every `->` resolves to an existing knot or stitch (relative stitches allowed).
+- No dead ends: no step with neither options nor divert (except a final step that diverts to END/DONE).
+- For EVERY decision question:
+  • YES/NO → both ACCEPT and DECLINE present (Back does not count).
+  • “X or Y?” → both X and Y present as forward options, labels mirror X/Y, distinct valid targets.
+  • Enumeration of N items → N forward options mirroring the items (plus optional Back).
+  • Quantity → 1 / 2 / 3+ covered.
+- Names follow the NAMING rules, no knots named END/DONE.
+
+OUTPUT
+- Return ONLY one fenced block ```ink ...``` with the final, validated script.
+"""
+
+
 
 
 TOOLS = [
@@ -176,10 +212,10 @@ def main() -> None:
     else:
         if sys.stdin.isatty():
             log("Режим: stdin отсутствует, берём промпт по умолчанию")
-            prompt = "Сгенерируй короткий Ink-сценарий по теме 'в кафе' для уровня A1."
+            prompt = "Сгенерируй Ink-сценарий по теме 'покупка в магазине' для уровня A2."
         else:
             log("Режим: читаем промпт из stdin…")
-            prompt = sys.stdin.read().strip() or "Сгенерируй короткий Ink-сценарий по теме 'в кафе' для уровня A1."
+            prompt = sys.stdin.read().strip() or "Сгенерируй Ink-сценарий по теме 'заказ такси по телефону' для уровня A2."
         log(f"Промпт готов (длина {len(prompt)} символов)")
 
     try:
