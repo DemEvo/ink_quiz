@@ -1,13 +1,4 @@
-# json_to_html_player.py
-# API:
-#   build_html_player(data: dict) -> str
-#
-# CLI (без файлов):  cat story.json | python -m json_to_html_player > out.html
-
-import json
-import sys
-
-TEMPLATE = r"""<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ru">
 <head>
 <meta charset="utf-8"/>
@@ -59,7 +50,218 @@ TEMPLATE = r"""<!DOCTYPE html>
   </div>
 </div>
 
-<script id="scenario-data" type="application/json">__DATA__</script>
+<script id="scenario-data" type="application/json">{
+  "format": "ink-json/v3",
+  "vars": {
+    "order": "ничего",
+    "total": 0
+  },
+  "lists": {},
+  "externals": [],
+  "order": [
+    "start",
+    "coffee",
+    "tea",
+    "sugar",
+    "seat",
+    "bill",
+    "thanks",
+    "END"
+  ],
+  "steps": [
+    {
+      "id": "start",
+      "text": "Вы в кафе. Бариста улыбается.",
+      "text_raw": "Вы в кафе. Бариста улыбается.",
+      "options": [
+        {
+          "id": "opt_1",
+          "text": "Я хочу кофе",
+          "next": "coffee",
+          "repeatable": false
+        },
+        {
+          "id": "opt_2",
+          "text": "Я хочу чай",
+          "next": "tea",
+          "repeatable": false
+        },
+        {
+          "id": "opt_3",
+          "text": "Уйти",
+          "next": "END",
+          "repeatable": false
+        }
+      ]
+    },
+    {
+      "id": "coffee",
+      "speaker": "Вы",
+      "text": "Я хочу кофе, пожалуйста.\nБариста: Хорошо. Это {total} рублей.",
+      "text_raw": "Вы: Я хочу кофе, пожалуйста.\nБариста: Хорошо. Это {total} рублей.",
+      "options": [
+        {
+          "id": "opt_1",
+          "text": "Сесть за столик",
+          "next": "seat",
+          "repeatable": false
+        },
+        {
+          "id": "opt_2",
+          "text": "Попросить сахар",
+          "next": "sugar",
+          "repeatable": false
+        },
+        {
+          "id": "opt_3",
+          "text": "Счёт, пожалуйста",
+          "next": "bill",
+          "repeatable": false
+        }
+      ],
+      "actions": [
+        {
+          "type": "set",
+          "var": "order",
+          "expr": "\"кофе\""
+        },
+        {
+          "type": "set",
+          "var": "total",
+          "expr": "100"
+        }
+      ]
+    },
+    {
+      "id": "tea",
+      "speaker": "Вы",
+      "text": "Я хочу чай, пожалуйста.\nБариста: Хорошо. Это {total} рублей.",
+      "text_raw": "Вы: Я хочу чай, пожалуйста.\nБариста: Хорошо. Это {total} рублей.",
+      "options": [
+        {
+          "id": "opt_1",
+          "text": "Сесть за столик",
+          "next": "seat",
+          "repeatable": false
+        },
+        {
+          "id": "opt_2",
+          "text": "Попросить сахар",
+          "next": "sugar",
+          "repeatable": false
+        },
+        {
+          "id": "opt_3",
+          "text": "Счёт, пожалуйста",
+          "next": "bill",
+          "repeatable": false
+        }
+      ],
+      "actions": [
+        {
+          "type": "set",
+          "var": "order",
+          "expr": "\"чай\""
+        },
+        {
+          "type": "set",
+          "var": "total",
+          "expr": "80"
+        }
+      ]
+    },
+    {
+      "id": "sugar",
+      "speaker": "Бариста",
+      "text": "Сахар? Конечно.",
+      "text_raw": "Бариста: Сахар? Конечно.",
+      "options": [
+        {
+          "id": "opt_1",
+          "text": "Спасибо",
+          "next": "thanks",
+          "repeatable": false
+        },
+        {
+          "id": "opt_2",
+          "text": "Попросить ещё",
+          "next": "sugar",
+          "repeatable": false
+        },
+        {
+          "id": "opt_3",
+          "text": "Счёт",
+          "next": "bill",
+          "repeatable": false
+        }
+      ]
+    },
+    {
+      "id": "seat",
+      "text": "Вы садитесь. Кофе/чай скоро.",
+      "text_raw": "Вы садитесь. Кофе/чай скоро.",
+      "options": [
+        {
+          "id": "opt_1",
+          "text": "Попросить сахар",
+          "next": "sugar",
+          "repeatable": false
+        },
+        {
+          "id": "opt_2",
+          "text": "Счёт",
+          "next": "bill",
+          "repeatable": false
+        }
+      ]
+    },
+    {
+      "id": "bill",
+      "speaker": "Бариста",
+      "text": "С вас {total} рублей.",
+      "text_raw": "Бариста: С вас {total} рублей.",
+      "options": [
+        {
+          "id": "opt_1",
+          "text": "Заплатить",
+          "next": "thanks",
+          "repeatable": false
+        },
+        {
+          "id": "opt_2",
+          "text": "Сказать \"Я не готов(а)\"",
+          "next": "start",
+          "repeatable": false
+        }
+      ]
+    },
+    {
+      "id": "thanks",
+      "speaker": "Бариста",
+      "text": "Спасибо! Хорошего дня!",
+      "text_raw": "Бариста: Спасибо! Хорошего дня!",
+      "divert": "END",
+      "end": true,
+      "actions": [
+        {
+          "type": "set",
+          "var": "order",
+          "expr": "\"ничего\""
+        },
+        {
+          "type": "set",
+          "var": "total",
+          "expr": "0"
+        }
+      ]
+    },
+    {
+      "id": "END",
+      "text": "Вы уходите из кафе. Конец.",
+      "text_raw": "Вы уходите из кафе. Конец."
+    }
+  ]
+}</script>
 <script>
 (function(){
   let scenario = null;
@@ -268,17 +470,3 @@ TEMPLATE = r"""<!DOCTYPE html>
 </script>
 </body>
 </html>
-"""
-
-def build_html_player(data: dict) -> str:
-    """Главная функция: на вход — JSON-объект сценария (dict), на выход — HTML (str)."""
-    json_blob = json.dumps(data, ensure_ascii=False, indent=2)
-    return TEMPLATE.replace("__DATA__", json_blob)
-
-# --- CLI: читает JSON из stdin, пишет HTML в stdout ---
-def _main():
-    data = json.loads(sys.stdin.read())
-    sys.stdout.write(build_html_player(data))
-
-if __name__ == "__main__":
-    _main()
