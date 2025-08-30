@@ -4,13 +4,14 @@
 
 from __future__ import annotations
 import os, sys, json, traceback
+from os import write
 from typing import Any, Dict, List
 
-# --- универсальная поддержка запусков (как модуль и как файл) ---
-if __name__ == "__main__" and __package__ is None:
-    root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    sys.path.insert(0, root_dir)
-    __package__ = "ink_playground"
+# --- imports / flat layout ---
+import sys, pathlib
+ROOT = pathlib.Path(__file__).parent.resolve()
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 # --- локальные инструменты ---
 from ink_validator import validate_ink as _validate_ink
@@ -146,6 +147,9 @@ def ask_gpt_ink(user_brief: str, max_rounds: int = 8) -> str:
                 log("Валидация OK. Конвертация ink→json и сборка html локально…")
                 json_obj = _ink_to_json(ink_text)
                 html_str = _build_html(json_obj)
+                with open("out.html", "w", encoding="utf-8") as file:
+                    file.write(html_str)
+
                 log("Готово. Возвращаем итог.")
                 return (
                     "### INK\n```ink\n" + ink_text + "\n```\n\n"
